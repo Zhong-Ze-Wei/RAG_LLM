@@ -1,0 +1,11 @@
+mode: api  # 可选：api 或 local
+
+api:
+  provider: deepseek
+  model_name: deepseek-chat
+  api_key: ""
+
+local:
+  model_path: model/qwen_7b  # 路径建议统一用 model，不要 models
+  device: cuda
+  dtype: float16

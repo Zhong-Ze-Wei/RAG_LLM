@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>简易GPT风格聊天</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <header>
+    简易GPT风格聊天
+  </header>
+
+  <div id="container">
+    <aside id="sidebar">
+      <p>🔧 功能栏（后续可加：清空对话、历史记录、模型选择）</p>
+    </aside>
+
+    <main id="main">
+      <div id="chatbox"></div>
+
+      <div id="input-area">
+        <input id="userInput" type="text" placeholder="输入你的问题..." />
+        <button id="sendBtn">发送</button>
+      </div>
+
+      <div id="param-area">
+        <label>
+          temperature:
+          <input type="range" id="temperature" min="0.01" max="1.5" step="0.01" value="0.7" />
+          <span id="temperatureVal">0.70</span>
+        </label>
+        <label>
+          top_p:
+          <input type="range" id="top_p" min="0.01" max="1" step="0.01" value="0.9" />
+          <span id="topPVal">0.90</span>
+        </label>
+        <label>
+          stream:
+          <select id="stream">
+            <option value="false" selected>False</option>
+            <option value="true">True</option>
+          </select>
+        </label>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const chatbox = document.getElementById('chatbox');
+    const userInput = document.getElementById('userInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const temperatureInput = document.getElementById('temperature');
+    const temperatureVal = document.getElementById('temperatureVal');
+    const topPInput = document.getElementById('top_p');
+    const topPVal = document.getElementById('topPVal');
+    const streamInput = document.getElementById('stream');
+
+    temperatureInput.addEventListener('input', () => {
+      temperatureVal.textContent = parseFloat(temperatureInput.value).toFixed(2);
+    });
+
+    topPInput.addEventListener('input', () => {
+      topPVal.textContent = parseFloat(topPInput.value).toFixed(2);
+    });
+
+    function appendMessage(text, sender) {
+      const msg = document.createElement('div');
+      msg.className = 'message ' + sender;
+      msg.innerHTML = sender === 'bot' ? marked.parse(text) : text;
+      chatbox.appendChild(msg);
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    async function sendMessage() {
+      const query = userInput.value.trim();
+      if (!query) return;
+
+      const temperature = parseFloat(temperatureInput.value);
+      const top_p = parseFloat(topPInput.value);
+      const stream = streamInput.value === 'true';
+
+      appendMessage(query, 'user');
+      userInput.value = '';
+      sendBtn.disabled = true;
+
+      try {
+        const res = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, temperature, top_p, stream })
+        });
+
+        if (!res.ok) {
+          appendMessage('接口调用失败，状态码: ' + res.status, 'bot');
+        } else {
+          const data = await res.json();
+          appendMessage(data.answer || '无回复', 'bot');
+        }
+      } catch (e) {
+        appendMessage('请求异常: ' + e.message, 'bot');
+      }
+
+      sendBtn.disabled = false;
+      userInput.focus();
+    }
+
+    sendBtn.onclick = sendMessage;
+    userInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    userInput.focus();
+  </script>
+</body>
+</html>
