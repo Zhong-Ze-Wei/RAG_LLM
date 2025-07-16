@@ -23,21 +23,51 @@ def safe_str(s):
         s = str(s)
     return s.encode('utf-8', 'ignore').decode('utf-8')
 
+def load_system_prompt(role="default"):
+    base_dir = os.path.join(os.path.dirname(__file__), "prompts")
+    prompt_path = os.path.join(base_dir, f"{role}.txt")
 
-# 执行一次对话
-def chat(query, temperature=0.5, top_p=0.95, stream=False):
-    # 构造消息列表，包含系统角色设定和历史对话内容
-    messages = [{"role": "system", "content": safe_str("你是一个有帮助的助手。")}]
+    try:
+        with open(prompt_path, "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        print(f"[提示] 未找到 {role}.txt，尝试加载 default.txt")
+        try:
+            fallback_path = os.path.join(base_dir, "default.txt")
+            with open(fallback_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            print(f"[错误] 加载默认提示词失败，使用内置默认。错误: {e}")
+            return "你是一个有帮助的助手。"
+
+def chat(query, temperature=0.5, top_p=0.95, stream=False, role="default", history=None):
+    if history is None:
+        history = []
+    # print(f"[DEBUG] history content before processing: {history}")
+
+    system_prompt = load_system_prompt(role)
+    messages = [{"role": "system", "content": safe_str(system_prompt)}]
+
     for turn in history:
+        # print(f"[DEBUG] processing turn: {turn}")
+
         messages.append({"role": "user", "content": safe_str(turn['user'])})
         messages.append({"role": "assistant", "content": safe_str(turn['bot'])})
+
     messages.append({"role": "user", "content": safe_str(query)})
 
-    # 调用底层 API 获取回复
     answer = bot.chat(messages, temperature=temperature, top_p=top_p, stream=stream)
 
-    # 更新历史记录
-    history.append({"user": query, "bot": answer})
+    # 如果是流式，answer可能不是字符串，不能直接append
+    if stream:
+        # 你可以选择不更新历史，或者用别的方法记录
+        pass
+    else:
+        # 确保answer是字符串
+        if not isinstance(answer, str):
+            answer = str(answer)
+        history.append({"user": query, "bot": answer})
+
     return answer
 
 

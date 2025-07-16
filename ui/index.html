@@ -7,24 +7,55 @@
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
+
+
 <body>
+  <!-- 标题 -->
   <header>
-    简易GPT风格聊天
+    GPT风格聊天
   </header>
 
+  <!-- 页面内容 -->
   <div id="container">
+    <!-- 会话侧边栏 -->
     <aside id="sidebar">
-      <p>🔧 功能栏（后续可加：清空对话、历史记录、模型选择）</p>
+      <h3>🎭 选择角色</h3>
+      <select id="roleSelector">
+        <option value="default">默认助手</option>
+        <option value="catgirl">柔情猫娘</option>
+        <option value="icequeen">高冷御姐</option>
+        <option value="scholar">严谨学者</option>
+        <option value="funnybuddy">搞笑损友</option>
+        <!-- 你可以继续添加角色 -->
+      </select>
+
+      <hr />
+
+      <h3>💬 聊天会话窗口</h3>
+      <ul id="session-list">
+        <!-- 会话列表动态生成 -->
+      </ul>
+      <button id="newSessionBtn">➕ 新建会话</button>
+      <button id="clearChatBtn">🧹 清空当前会话</button>
     </aside>
 
+    <!-- 主聊天区域 -->
     <main id="main">
-      <div id="chatbox"></div>
+      <!-- 会话信息标题栏 -->
+      <div id="session-header">
+        <span id="session-title">会话: 默认</span>
+      </div>
 
+      <!-- 聊天记录展示 -->
+      <div id="chatbox" class="chatbox"></div>
+
+      <!-- 用户输入 -->
       <div id="input-area">
         <input id="userInput" type="text" placeholder="输入你的问题..." />
         <button id="sendBtn">发送</button>
       </div>
 
+      <!-- 模型参数设置 -->
       <div id="param-area">
         <label>
           temperature:
@@ -47,6 +78,7 @@
     </main>
   </div>
 
+  <!-- js操作 -->
   <script>
     const chatbox = document.getElementById('chatbox');
     const userInput = document.getElementById('userInput');
@@ -56,23 +88,65 @@
     const topPInput = document.getElementById('top_p');
     const topPVal = document.getElementById('topPVal');
     const streamInput = document.getElementById('stream');
+    const roleSelector = document.getElementById('roleSelector'); // ✅ 获取角色选择器
+    const sessionList = document.getElementById('sessionList');
+    const sessionTitle = document.getElementById('sessionTitle');
+    const newSessionBtn = document.getElementById('newSessionBtn');
+    const clearChatBtn = document.getElementById('clearChatBtn');
 
+    let sessions = {};
+    let currentSessionId = null;
+
+    // 更新参数值展示
     temperatureInput.addEventListener('input', () => {
       temperatureVal.textContent = parseFloat(temperatureInput.value).toFixed(2);
     });
-
     topPInput.addEventListener('input', () => {
       topPVal.textContent = parseFloat(topPInput.value).toFixed(2);
     });
 
+    // 添加消息到聊天框 & 存入会话
     function appendMessage(text, sender) {
       const msg = document.createElement('div');
       msg.className = 'message ' + sender;
       msg.innerHTML = sender === 'bot' ? marked.parse(text) : text;
       chatbox.appendChild(msg);
       chatbox.scrollTop = chatbox.scrollHeight;
+
+      if (currentSessionId) {
+        sessions[currentSessionId].push({ role: sender, text });
+      }
     }
 
+    // 渲染当前聊天记录
+    function renderChat() {
+      chatbox.innerHTML = '';
+      const messages = sessions[currentSessionId] || [];
+      messages.forEach(msg => {
+        const div = document.createElement('div');
+        div.className = 'message ' + msg.role;
+        div.innerHTML = msg.role === 'bot' ? marked.parse(msg.text) : msg.text;
+        chatbox.appendChild(div);
+      });
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    //转换函数
+    function transformHistory(rawHistory) {
+      const newHistory = [];
+      for (let i = 0; i < rawHistory.length; i++) {
+        if (rawHistory[i].role === 'user') {
+          const userText = rawHistory[i].text;
+          const botText = (rawHistory[i + 1] && rawHistory[i + 1].role === 'bot') ? rawHistory[i + 1].text : '';
+          newHistory.push({ user: userText, bot: botText });
+          i++; // 跳过bot消息
+        }
+      }
+      return newHistory;
+    }
+
+
+    // 发送消息逻辑
     async function sendMessage() {
       const query = userInput.value.trim();
       if (!query) return;
@@ -80,16 +154,28 @@
       const temperature = parseFloat(temperatureInput.value);
       const top_p = parseFloat(topPInput.value);
       const stream = streamInput.value === 'true';
+      const selectedRole = roleSelector.value;
 
       appendMessage(query, 'user');
       userInput.value = '';
       sendBtn.disabled = true;
 
       try {
+        // 转换历史格式
+        const rawHistory = sessions[currentSessionId] || [];
+        const history = transformHistory(rawHistory);
+
         const res = await fetch('/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, temperature, top_p, stream })
+          body: JSON.stringify({
+            query,
+            temperature,
+            top_p,
+            stream,
+            role: selectedRole,
+            history  // 传转换后的历史
+          })
         });
 
         if (!res.ok) {
@@ -106,12 +192,53 @@
       userInput.focus();
     }
 
+    // 新建会话
+    function newSession() {
+      currentSessionId = `session_${Date.now()}`;
+      sessions[currentSessionId] = [];
+      updateSessionList();
+      renderChat();
+      sessionTitle.textContent = `当前会话: ${currentSessionId}`;
+    }
+
+    // 清空当前会话
+    function clearChat() {
+      if (currentSessionId && confirm("确定要清空当前会话吗？")) {
+        sessions[currentSessionId] = [];
+        renderChat();
+      }
+    }
+
+    // 切换会话
+    function switchSession(sessionId) {
+      currentSessionId = sessionId;
+      renderChat();
+      sessionTitle.textContent = `当前会话: ${sessionId}`;
+    }
+
+    // 渲染会话列表
+    function updateSessionList() {
+      sessionList.innerHTML = '';
+      Object.keys(sessions).forEach(sessionId => {
+        const btn = document.createElement('button');
+        btn.textContent = sessionId;
+        btn.onclick = () => switchSession(sessionId);
+        sessionList.appendChild(btn);
+      });
+    }
+
     sendBtn.onclick = sendMessage;
     userInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') sendMessage();
     });
 
-    userInput.focus();
+    newSessionBtn.onclick = newSession;
+    clearChatBtn.onclick = clearChat;
+
+    window.onload = () => {
+      newSession(); // 启动时自动新建
+    };
   </script>
+
 </body>
 </html>

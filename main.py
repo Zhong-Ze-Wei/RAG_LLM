@@ -14,29 +14,57 @@ class ChatRequest(BaseModel):
     temperature: float = 0.5
     top_p: float = 0.95
     stream: bool = False
+    role: str = "default"
+    history: list[dict] = []
 
 @app.post("/chat")
 async def chat_api(req: ChatRequest):
-    print(f"[chat_api] 接收到请求：query='{req.query}', temperature={req.temperature}, top_p={req.top_p}, stream={req.stream}")
+    print(f"[chat_api] 接收到请求：query='{req.query}', role='{req.role}', temperature={req.temperature}, top_p={req.top_p}, stream={req.stream}")
+
     if req.stream:
-        # 检测 chat 是否异步生成器函数
         if inspect.isasyncgenfunction(chat):
             async def event_generator():
-                async for chunk in chat(req.query, temperature=req.temperature, top_p=req.top_p, stream=True):
+                async for chunk in chat(
+                    req.query,
+                    temperature=req.temperature,
+                    top_p=req.top_p,
+                    stream=True,        # 流式传输
+                    role=req.role,
+                    history=req.history
+                ):
                     yield f"data: {json.dumps({'answer': chunk})}\n\n"
                     await asyncio.sleep(0.01)
                 yield "data: [DONE]\n\n"
             return StreamingResponse(event_generator(), media_type="text/event-stream")
         else:
-            # 同步函数无法流式，只能一次性返回
-            answer = chat(req.query, temperature=req.temperature, top_p=req.top_p, stream=False)
+            answer = chat(
+                req.query,
+                temperature=req.temperature,
+                top_p=req.top_p,
+                stream=False,           #非流式传输
+                role=req.role,
+                history=req.history
+            )
             return JSONResponse({"answer": answer})
     else:
-        # 普通请求
         if inspect.iscoroutinefunction(chat):
-            answer = await chat(req.query, temperature=req.temperature, top_p=req.top_p, stream=False)
+            answer = await chat(
+                req.query,
+                temperature=req.temperature,
+                top_p=req.top_p,
+                stream=False,
+                role=req.role,
+                history=req.history
+            )
         else:
-            answer = chat(req.query, temperature=req.temperature, top_p=req.top_p, stream=False)
+            answer = chat(
+                req.query,
+                temperature=req.temperature,
+                top_p=req.top_p,
+                stream=False,
+                role=req.role,
+                history=req.history
+            )
         return JSONResponse({"answer": answer})
 
 @app.post("/reset")
